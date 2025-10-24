@@ -5,8 +5,29 @@ import json
 ###############
 # UI Structure
 ###############
+# Initialize the root window information
+root = Tk()
+root.geometry("675x540")
+root.title("Joshua Hutson CS361 Project")
+title_icon = PhotoImage(file='static/moon_icon.png')
+root.iconphoto(True, title_icon)
+root.config(background='#171717')
+
+# Constructor for start window
+start_window = Label(root,
+                     text="Archon's Adventure",
+                     font=('Morris Roman', 40),
+                     fg='#c5c5c5',
+                     bg='#171717',
+                     relief=GROOVE,
+                     bd=10,
+                     padx=10,
+                     pady=10)
+
+start_window.pack()
 
 
+root.mainloop()
 ###############
 # Game instance
 ###############
@@ -57,6 +78,10 @@ class Player:
     def add_item(self, item):
         """Add an item to the player character's inventory."""
         self._inventory.append(item)
+
+    def remove_item(self, item):
+        """Remove an item from the player character's inventory"""
+        self._inventory.remove(item)
 
 
 def create_player():
