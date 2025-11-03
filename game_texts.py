@@ -24,3 +24,8 @@ HELP_TEXT = textwrap.dedent("""
         Interact with items in your inventory to use or discard them, inspect locations for important details. 
         Go to the stats screen to check your current stats as well as save the current game or load the previous save file.
         """)
+
+LOAD_WARNING_TEXT = textwrap.dedent("""
+        Warning! You will lose any progress that you have made since you last saved!\n
+        Are you sure that you want to continue loading your previous save?
+        """)

@@ -11,7 +11,7 @@ old_broadsword = Item(
     "Old Broadsword",
     "A sword with a sturdy hilt and wide blade. It is covered in rust.",
     "Adds +5 Attack Value",
-    apply_effect=lambda p: p.stats.update({"attack": p.stats["attack"] + 5}),
+    equip_effect=lambda p: p.stats.update({"attack": p.stats["attack"] + 5}),
     remove_effect=lambda p: p.stats.update({"attack": p.stats["attack"] - 5})
 )
 
