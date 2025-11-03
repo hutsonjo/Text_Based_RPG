@@ -2,6 +2,7 @@ import textwrap
 from tkinter import *
 import json
 from game_texts import INTRO_TEXT, LOAD_TEXT, HELP_TEXT, LOAD_WARNING_TEXT
+from items import *
 
 ###############
 # Game Logic
@@ -21,16 +22,15 @@ class Player:
 
 class Item:
     """A class that defines an item that can be held in the user's inventory."""
-    def __init__(self, name, narration, description, consumable=False,
+    def __init__(self, name, description, consumable=False,
                  equip_effect=lambda player: None,
                  apply_effect=lambda player: None,
                  remove_effect=lambda player: None):
         """Initialize the attributes of the Item object"""
         self.name = name
-        self.narration = narration
         self.description = description
         self.consumable = consumable
-        self.equipEffect = equip_effect
+        self.equip_effect = equip_effect
         self.apply_effect = apply_effect
         self.remove_effect = remove_effect
 
@@ -86,8 +86,7 @@ class GameLogic:
     def use_item(self, item):
         """Uses the apply effect of an item in the player character's inventory."""
         item.apply_effect(self._player)
-        if item.consumable:
-            self.remove_item(item)
+        self.remove_item(item)
 
     def stat_retrieval(self):
         """Returns a string of the player stats to be displayed in the stat label."""
@@ -99,6 +98,11 @@ class GameLogic:
             Attack: {self._player.stats['attack']}
             Defense: {self._player.stats['defense']}
             """)
+
+    def inv_retrieval(self):
+        """Returns a list of the player's inventory defined by name, narration, and description."""
+        return self._player.inventory
+
 
 
 # ##############
@@ -145,14 +149,16 @@ class UI:
                                  text=INTRO_TEXT,
                                  wraplength=800,
                                  justify='center',)
-        self._left_inv_label = Label(self._text_window, wraplength=400, justify='left')
-        self._right_inv_label = Label(self._text_window, wraplength=400, justify='left')
+        self._inv_listbox = Listbox(self._text_window, justify='left')
+        self._inv_desc_label = Label(self._text_window, wraplength=800, justify='left')
         self._inspection_label = Label(self._text_window, wraplength=800, justify='left')
         self._stats_label = Label(self._text_window, wraplength=800, justify='left')
 
-        # Initialize each label and then lift the primary text label
-        for frame in (self._text_label, self._left_inv_label, self._right_inv_label, self._inspection_label, self._stats_label):
+        # Initialize each widget and then lift the primary text label
+        for frame in (self._text_label, self._inspection_label, self._stats_label):
             frame.place(relx=0, rely=0, relwidth=1, relheight=1)
+        self._inv_listbox.place(relx=0, rely=0, relwidth=1, relheight=0.5)
+        self._inv_desc_label.place(relx=0, rely=0.5, relwidth=1, relheight=0.5)
         self._text_label.lift()
 
         # Initialize bottom of text window for button placements & initialize ready button
@@ -226,11 +232,16 @@ class UI:
 
     def _return(self):
         """Places the text window that holds narration at the front of the screen."""
-        self._text_window.lift()
-        self._enable_movement()
+        # Remove unneeded widgets
         self._remove_item_buttons()
         self._remove_save_buttons()
+
+        # Enable any disabled controls and lift the text window
+        self._inventory_button.config(state='normal')
+        self._inspect_button.config(state='normal')
         self._stats_button.config(state='normal')
+        self._enable_movement()
+        self._text_window.lift()
 
     def _move(self, direction):
         """Advances the player through the map"""
@@ -241,16 +252,63 @@ class UI:
         # Remove or disable unneeded widgets
         self._disable_movement()
         self._remove_save_buttons()
+        self._inventory_button.config(state='disabled')
+        self._stats_button.config(state='normal')
 
         # Bring up Inventory UI
-        self._left_inv_label.lift()
-        self._right_inv_label.lift()
+        self._inv_listbox.lift()
+        self._inv_desc_label.lift()
+        self._use_item_button.place(relx=0.4, rely=0.25, anchor="center")
+        self._discard_item_button.place(relx=0.6, rely=0.25, anchor="center")
+
+        # UI logic
+        self._inv_listbox.bind("<<ListboxSelect>>", self._on_inv_select)
+
+        # Populate item list
+        item_list = self._game_logic.inv_retrieval()
+        for item in item_list:
+            self._inv_listbox.insert('end', item.name)
+
+    def _on_inv_select(self, event):
+        """Displays the narration and description of the item that is currently selected to the text box on the
+        inventory page."""
+        # Identify cursor selection
+        sel = event.widget.curselection()
+        if not sel:
+            return
+
+        # Initialize variable for item and insert its description into the label
+        item_list = self._game_logic.inv_retrieval()
+        item = item_list[sel[0]]
+        self._inv_desc_label.config(text=item.description)
 
     def _use_item(self):
-        pass
+        """Processes the apply_effect if the selected item is a consumable and then updates the displayed inventory
+        accordingly."""
+        # Identify cursor selection
+        sel = self._inv_listbox.curselection()
+        if not sel:
+            return
+
+        # Initialize variable for item and use it if it is a consumable, update inventory display
+        item_list = self._game_logic.inv_retrieval()
+        item = item_list[sel[0]]
+        if item.consumable:
+            self._game_logic.use_item(item)
+            self._inv_listbox.delete(sel[0])
 
     def _discard_item(self):
-        pass
+        """Remove the selected item from the player character's inventory."""
+        # Identify cursor selection
+        sel = self._inv_listbox.curselection()
+        if not sel:
+            return
+
+        # Removes the item, update inventory display
+        item_list = self._game_logic.inv_retrieval()
+        item = item_list[sel[0]]
+        self._game_logic.remove_item(item)
+        self._inv_listbox.delete(sel[0])
 
     def _inspect_page(self):
         """Inspects the environment, fetching additional text information for the user to read."""
@@ -262,6 +320,7 @@ class UI:
         self._disable_movement()
         self._remove_item_buttons()
         self._stats_button.config(state='disabled')
+        self._inventory_button.config(state='normal')
 
         # Bring up stats UI
         self._stats_label.lift()

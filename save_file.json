@@ -1,1 +1,1 @@
-{"name": "Josh", "stats": {"health": 100, "mana": 0, "attack": 10, "defense": 10}, "inventory": ["apple", "rusty sword", "cracked shield"], "position": ["test_map", [0, 0]]}
+{"name": "Josh", "stats": {"health": 100, "mana": 0, "attack": 10, "defense": 10}, "inventory": [], "position": ["test_map", [0, 0]]}
