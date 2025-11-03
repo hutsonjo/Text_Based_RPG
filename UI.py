@@ -3,6 +3,8 @@ from tkinter import *
 import json
 from game_texts import INTRO_TEXT, LOAD_TEXT, HELP_TEXT, LOAD_WARNING_TEXT
 from items import *
+import zmq
+import time
 
 ###############
 # Game Logic
@@ -38,7 +40,7 @@ class Item:
 class GameLogic:
     """A class that holds the logic for running an instance of the game and communicating with microservices."""
 
-    def __init__(self):
+    def __init__(self, map_addr="tcp://localhost:55555"):
         """Initialize the game instance, defined by player character save data and other factors."""
         self._player = Player({
             "name": "Hero",
@@ -50,6 +52,46 @@ class GameLogic:
             },
             "inventory": [],
             "position": ["placeholder", [0, 0]]})
+
+        # Initialize context and timer for zmq, establish map socket
+        self._ctx = zmq.Context.instance()
+        self._req_timeout_ms = 2000
+        self._map_sock = self._ctx.socket(zmq.REQ)
+        self._map_sock.connect(map_addr)
+
+    def _send_map_request(self, destination):
+        """Send a request to the map for updated information regarding the player's new position"""
+        # establish a JSON file to send
+        msg = {
+            "map": self._player.position[0],
+            "coords": destination
+        }
+        print(msg)
+        # Send message to map program
+        try:
+            self._map_sock.send_json(msg)
+            time.sleep(0.1)
+            reply = self._map_sock.recv_json()
+            if reply["status"] == "success":
+                self._player.position[1] = destination
+                return reply['data']
+            elif reply["status"] == "error" or reply["status"] == "out_of_bounds":
+                return reply['data']
+        except zmq.Again:
+            return {"status": "error", "message": "Map service timeout"}
+        except zmq.ZMQError as e:
+            return {"status": "error", "message": f"ZMQ failure: {e}"}
+
+    def move_player(self, direction):
+        """Calculates the new position of the player based on the input from the UI, calls the map request method and
+        then returns the response from the map program to the UI for display."""
+        x, y = self._player.position[1]
+        if direction == "north": y += 1
+        elif direction == "east": x += 1
+        elif direction == "south": y -= 1
+        elif direction == "west": x -= 1
+        resp = self._send_map_request([x, y])
+        return resp
 
     def load_player(self):
         """Access the save_file.json file get information to create a previously saved player object."""
@@ -102,7 +144,6 @@ class GameLogic:
     def inv_retrieval(self):
         """Returns a list of the player's inventory defined by name, narration, and description."""
         return self._player.inventory
-
 
 
 # ##############
@@ -230,6 +271,12 @@ class UI:
         self._help_button.place(relx=0, rely=1, anchor='sw')
         self._return_button.place(relx=1, rely=1, anchor='se')
 
+        # Load the current tile narration
+        tile = self._game_logic.move_player(None)
+        narration = tile['narration']
+        self._text_label.config(text=narration)
+
+
     def _return(self):
         """Places the text window that holds narration at the front of the screen."""
         # Remove unneeded widgets
@@ -241,11 +288,14 @@ class UI:
         self._inspect_button.config(state='normal')
         self._stats_button.config(state='normal')
         self._enable_movement()
-        self._text_window.lift()
+        self._text_label.lift()
 
     def _move(self, direction):
-        """Advances the player through the map"""
-        pass
+        """Calls to the game_logic to move the player through the map"""
+        new_tile = self._game_logic.move_player(direction)
+        narration = new_tile['narration']
+        self._text_label.config(text=narration)
+
 
     def _inventory_page(self):
         """Restructures the text window according to the inventory of the player character."""
@@ -313,6 +363,11 @@ class UI:
     def _inspect_page(self):
         """Inspects the environment, fetching additional text information for the user to read."""
         self._disable_movement()
+        self._inspect_button.config(state='disabled')
+
+        tile = self._game_logic.move_player(None)
+        narration = tile['inspection']
+        self._text_label.config(text=narration)
 
     def _stats_page(self):
         """Restructures the text window according to the stats of the player character."""
@@ -352,17 +407,13 @@ class UI:
 
     def _disable_movement(self):
         """Disables the movement buttons while on the non-exploration screens"""
-        self._north_button.config(state='disabled')
-        self._east_button.config(state='disabled')
-        self._south_button.config(state='disabled')
-        self._west_button.config(state='disabled')
+        for button in (self._north_button, self._east_button, self._south_button, self._west_button):
+            button.config(state='disabled')
 
     def _enable_movement(self):
         """Enables the movement buttons while on the non-exploration screens"""
-        self._north_button.config(state='normal')
-        self._east_button.config(state='normal')
-        self._south_button.config(state='normal')
-        self._west_button.config(state='normal')
+        for button in (self._north_button, self._east_button, self._south_button, self._west_button):
+            button.config(state='normal')
 
     def _remove_item_buttons(self):
         """Removes the use item and discard buttons from the UI."""
