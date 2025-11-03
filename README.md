@@ -16,6 +16,8 @@ test_map.py - A standalone map microservice that responds to map position reques
 
 item.py - Defines the Item class and item effect behavior.
 
+game_texts.py - Holds some large text variables
+
 save_file.json - Stores persistent player data (position, stats, and inventory).
 
 ### How It Works
