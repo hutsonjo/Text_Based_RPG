@@ -1,0 +1,19 @@
+import textwrap
+
+INTRO_TEXT = textwrap.dedent("""
+        ARCHON'S ADVENTURE\n\n
+        Welcome to Joshua Hutson’s CS 361 Project\n\n
+        Welcome to the adventure! In this game, you’ll get to explore different locations, acquire interesting items, 
+        and make narrative decisions to progress. Use the directional buttons to move forward, back, left, or right. 
+        Interact with items in your inventory to use or discard them, inspect locations for important details, and check 
+        your player’s stats to keep track of your progress. Each action is controlled with simple button presses.\n\n
+        Ready to start your journey?
+        """)
+
+LOAD_TEXT = textwrap.dedent("""
+        ARCHON'S ADVENTURE\n\n\n\n
+        If this is not your first time playing, you may click “Continue” to load your previous save file.
+        If this is your first playthrough or you would like to start a new game, then click “New File”.\n
+        BE WARNED! Any old save files will be deleted upon starting anew.
+        You may access the save/load commands from the player stats at any point.
+        """)
