@@ -15,3 +15,5 @@ old_broadsword = Item(
     remove_effect=lambda p: p.stats.update({"attack": p.stats["attack"] - 5})
 )
 
+ITEM_LOG = {'health_potion': health_potion,
+            'old_broadsword': old_broadsword}

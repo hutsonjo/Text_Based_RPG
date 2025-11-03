@@ -36,6 +36,9 @@ class Item:
         self.apply_effect = apply_effect
         self.remove_effect = remove_effect
 
+    def to_dict(self):
+        """Return a dictionary of the item attributes"""
+
 
 class GameLogic:
     """A class that holds the logic for running an instance of the game and communicating with microservices."""
@@ -50,8 +53,8 @@ class GameLogic:
                 "attack": 10,
                 "defense": 10
             },
-            "inventory": [],
-            "position": ["placeholder", [0, 0]]})
+            "inventory": [health_potion, old_broadsword],
+            "position": ["test_map", [0, 0]]})
 
         # Initialize context and timer for zmq, establish map socket
         self._ctx = zmq.Context.instance()
@@ -102,13 +105,18 @@ class GameLogic:
                     return
                 else:
                     player_data = json.loads(contents)
+                    # Rebuild inventory from item library
+                    if "inventory" in player_data:
+                        player_data["inventory"] = [
+                            ITEM_LOG[name] for name in player_data["inventory"] if name in ITEM_LOG]
                     self._player = Player(player_data)
         except (FileNotFoundError, json.JSONDecodeError):
             return
 
     def save_player(self):
         """Access the save_file.json file and overwrite information to store current player object."""
-        player_data = vars(self._player)
+        player_data = vars(self._player).copy()
+        player_data["inventory"] = [item.name for item in self._player.inventory]
         try:
             with open('save_file.json', 'w') as save_data:
                 json.dump(player_data, save_data)
