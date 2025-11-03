@@ -17,3 +17,10 @@ LOAD_TEXT = textwrap.dedent("""
         BE WARNED! Any old save files will be deleted upon starting anew.
         You may access the save/load commands from the player stats at any point.
         """)
+
+HELP_TEXT = textwrap.dedent("""
+        Directions:
+        Use the directional buttons to explore the environment. 
+        Interact with items in your inventory to use or discard them, inspect locations for important details. 
+        Go to the stats screen to check your current stats as well as save the current game or load the previous save file.
+        """)
