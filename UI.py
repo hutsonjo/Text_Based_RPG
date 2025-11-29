@@ -1,7 +1,7 @@
 import textwrap
 from tkinter import *
 import json
-from game_texts import INTRO_TEXT, LOAD_TEXT, HELP_TEXT, LOAD_WARNING_TEXT
+from game_texts import *
 from items import *
 import zmq
 
@@ -43,25 +43,14 @@ class GameLogic:
 
     def __init__(self):
         """Initialize the game instance, defined by player character save data and other factors."""
-        self._player = Player({
-            "name": "Hero",
-            "stats": {
-                "health": 100,
-                "mana": 0,
-                "attack": 10,
-                "defense": 10
-            },
-            "inventory": [health_potion, old_broadsword],
-            "position": ["test_map", [0, 0]]})
-        self._tile_info = {
-            'narration': 'Map name does not match save file or map service is down',
-            'inspection': 'Map name does not match save file or map service is down'}
+        self.reset()
 
         # Establish microservice communication routes
         services = {
             "random": "tcp://localhost:5555",
             "battle": "tcp://localhost:5556",
             "map": "tcp://localhost:5557",
+            "enemy": "tcp://localhost:5558"
         }
 
         # Initialize context and socks obj
@@ -90,7 +79,8 @@ class GameLogic:
             reply = self._socks['map'].recv_json()
             if reply["status"] == "success":
                 self._player.position[1] = destination
-                self._tile_info = reply['data']
+                for key in reply['data'].keys():
+                    self._tile_info[key] = reply['data'][key]
             elif reply["status"] == "error" or reply["status"] == "out_of_bounds":
                 self._tile_info = reply['data']
         except zmq.Again:
@@ -111,6 +101,36 @@ class GameLogic:
         except (zmq.Again, zmq.ZMQError) as e:
             return 50
 
+    def _send_enemy_request(self):
+        """Send a request to the random value generator for a random number in range 1 to 100. If a failure occurs,
+        simply return a default value of 50"""
+        msg = [self._tile_info['biome']]
+        try:
+            self._socks['enemy'].send_string(msg)
+            reply = self._socks['enemy'].recv_json()
+            return reply
+        except (zmq.Again, zmq.ZMQError) as e:
+            return self._current_enemy
+
+    def _send_battle_request(self):
+        """Send a request to the arithmetic service to determine the results of a turn of battle."""
+        # Establish message to be sent
+        msg = {
+            "service_key": "battle_logic",
+            "data": [
+                self._player.stats,
+                self._current_enemy
+            ]
+        }
+
+        # Send message and retrieve results
+        try:
+            self._socks['battle'].send_json(msg)
+            reply = self._socks['battle'].recv_json()
+            return reply
+        except (zmq.Again, zmq.ZMQError) as e:
+            return msg['data']
+
     def move_player(self, direction):
         """Calculates the new position of the player based on the input from the UI, calls the map request method and
         then returns the response from the map program to the UI for display."""
@@ -128,6 +148,68 @@ class GameLogic:
     def get_inspection(self):
         """Returns the inspection of the current tile information"""
         return self._tile_info["inspection"]
+
+    def evaluate_encounter(self):
+        """Calculates the chance of a battle occurring, returning accordingly"""
+        chance = self._send_value_request()
+        if chance > self._tile_info['encounter']:
+            return False
+        else:
+            return True
+
+    def get_enemy(self):
+        """Sets the value of the enemy property by using the enemy service"""
+        if self._current_enemy['health'] <= 0:
+            enemy = self._send_enemy_request()
+            self._current_enemy = enemy
+        return self._current_enemy
+
+    def flee(self):
+        """Calls on the random value generator to determine a 50% chance to flee"""
+        chance = self._send_value_request()
+        if chance < 50:
+            return False
+        else:
+            return True
+
+    def reset(self):
+        """Resets the game for a new file"""
+        self._player = Player({
+            "name": "Hero",
+            "stats": {
+                "health": 100,
+                "mana": 0,
+                "attack": 10,
+                "defense": 10
+            },
+            "inventory": [health_potion, old_broadsword],
+            "position": ["test_map", [0, 0]]})
+        self._tile_info = {
+            'narration': 'Map name does not match save file or map service is down',
+            'inspection': 'Map name does not match save file or map service is down',
+            'biome': '',
+            'encounter': 0}
+        self._current_enemy = {
+            'name': 'None',
+            'health': 0,
+            'attack': 0,
+            'defense': 0,
+            'biome': 'none'
+        }
+
+    def get_enemy_health(self):
+        """Returns the current enemy's health"""
+        return self._current_enemy['health']
+
+    def get_player_health(self):
+        """Returns the stats of the player object"""
+        return self._player.stats['health']
+
+    def battle_turn(self):
+        """Public function to simulate a turn of battle"""
+        player, enemy = self._send_battle_request()
+        self._player.stats['health'] = player['health']
+        self._current_enemy['health'] = enemy['health']
 
     def load_player(self):
         """Access the save_file.json file get information to create a previously saved player object."""
@@ -171,20 +253,28 @@ class GameLogic:
         item.apply_effect(self._player)
         self.remove_item(item)
 
-    def stat_retrieval(self):
-        """Returns a string of the player stats to be displayed in the stat label."""
+    def inv_retrieval(self):
+        """Returns a list of the player's inventory defined by name, narration, and description."""
+        return self._player.inventory
+
+    def player_display(self):
+        """Returns a string of the player stats to be displayed in a label."""
         return textwrap.dedent(f"""
             Player: {self._player.name}
-            
             Health: {self._player.stats['health']}
             Mana: {self._player.stats['mana']}
             Attack: {self._player.stats['attack']}
             Defense: {self._player.stats['defense']}
             """)
 
-    def inv_retrieval(self):
-        """Returns a list of the player's inventory defined by name, narration, and description."""
-        return self._player.inventory
+    def enemy_display(self):
+        """Returns a string of the current enemy's stats to be displayed in a label."""
+        return textwrap.dedent(f"""
+            Enemy: {self._current_enemy['name']}
+            Health: {self._player.stats['health']}
+            Attack: {self._player.stats['attack']}
+            Defense: {self._player.stats['defense']}
+            """)
 
 
 # ##############
@@ -232,7 +322,8 @@ class UI:
                                  wraplength=800,
                                  justify='center',)
         self._inv_listbox = Listbox(self._text_window, justify='left')
-        self._inv_desc_label = Label(self._text_window, wraplength=800, justify='left')
+        self._upper_desc_label = Label(self._text_window, wraplength=800, justify='left')
+        self._lower_desc_label = Label(self._text_window, wraplength=800, justify='left')
         self._inspection_label = Label(self._text_window, wraplength=800, justify='left')
         self._stats_label = Label(self._text_window, wraplength=800, justify='left')
 
@@ -240,7 +331,8 @@ class UI:
         for frame in (self._text_label, self._inspection_label, self._stats_label):
             frame.place(relx=0, rely=0, relwidth=1, relheight=1)
         self._inv_listbox.place(relx=0, rely=0, relwidth=1, relheight=0.5)
-        self._inv_desc_label.place(relx=0, rely=0.5, relwidth=1, relheight=0.5)
+        self._upper_desc_label.place(relx=0, rely=0, relwidth=1, relheight=0.5)
+        self._lower_desc_label.place(relx=0, rely=0.5, relwidth=1, relheight=0.5)
         self._text_label.lift()
 
         # Initialize bottom of text window for button placements & initialize ready button
@@ -259,11 +351,13 @@ class UI:
         self._discard_item_button = Button(self._bottom_window, text='Discard', command=self._discard_item)
         self._save_file_button = Button(self._bottom_window, text='Save File', command=self._game_logic.save_player)
         self._load_file_button = Button(self._bottom_window, text='Load File', command=self._load_warning)
+        self._attack_button = Button(self._bottom_window, text='Attack', command=self._attack)
+        self._flee_button = Button(self._bottom_window, text='Flee', command=self._flee)
 
         # Establish load window buttons
         self._new_file_button = Button(self._bottom_window,
                                        text="New File",
-                                       command=self._initiate_game,
+                                       command=self._load_new_save,
                                        bg='#9c9c9c')
         self._continue_button = Button(self._bottom_window,
                                        text="Continue",
@@ -279,6 +373,11 @@ class UI:
         self._ready_button.place_forget()
         self._new_file_button.place(relx=0.4, rely=0.25, anchor="center")
         self._continue_button.place(relx=0.6, rely=0.25, anchor="center")
+
+    def _load_new_save(self):
+        """Loads the game with a new save file"""
+        self._game_logic.reset()
+        self._initiate_game()
 
     def _load_initial_save(self):
         """Loads the saved or initiates a new player"""
@@ -335,8 +434,68 @@ class UI:
     def _move(self, direction):
         """Calls to the game_logic to move the player through the map"""
         self._game_logic.move_player(direction)
-        narration = self._game_logic.get_narration()
-        self._text_label.config(text=narration)
+        if self._game_logic.evaluate_encounter():
+            self._battle_page()
+        else:
+            narration = self._game_logic.get_narration()
+            self._text_label.config(text=narration)
+
+    def _battle_page(self, mid_battle=False):
+        """Restructures the UI for a battle encounter and uses the game logic to determine the outcome"""
+        if not mid_battle:
+            # Remove or disable unneeded widgets
+            self._disable_movement()
+            self._disable_control_panel()
+            self._remove_save_buttons()
+            self._return_button.config(state=DISABLED)
+
+            # Bring up Battle UI
+            self._attack_button.place(relx=0.4, rely=0.25, anchor="center")
+            self._flee_button.place(relx=0.6, rely=0.25, anchor="center")
+            self._upper_desc_label.lift()
+            self._lower_desc_label.lift()
+
+            # This call loads in a new enemy
+            self._game_logic.get_enemy()
+
+        # Update UI text display to enemy and player stats
+        self._upper_desc_label.config(text=self._game_logic.enemy_display())
+        self._lower_desc_label.config(text=self._game_logic.player_display())
+
+    def _attack(self):
+        """Calls to the game_logic to evaluate the result of a turn of combat"""
+        self._game_logic.battle_turn()
+        if self._game_logic.get_enemy_health() <= 0:
+            self._victory_and_flee_page()
+        elif self._game_logic.get_enemy_health() <= 0:
+            self._game_over_page()
+        else:
+            self._battle_page(True)
+
+    def _flee(self):
+        """Calculates a chance for the player to leave the encounter"""
+        if self._game_logic.flee():
+            self._victory_and_flee_page(False)
+        else:
+            self._flee_button.config(state=DISABLED, text='Failure!')
+
+    def _victory_and_flee_page(self, victory=True):
+        """Displays that the player is victorious and sets up return to exploration."""
+        self._remove_battle_buttons()
+        self._return_button.config(state='normal')
+        self._text_label.lift()
+        if victory:
+            self._text_label.config(text="VICTORY!")
+        else:
+            self._text_label.config(text="You flee!")
+
+    def _game_over_page(self):
+        """Occurs if the player dies, offers to load a previous save or start new file."""
+        self._remove_battle_buttons()
+        self._text_label.lift()
+        self._text_label.config(text=GAME_OVER)
+        self._new_file_button.lift()
+        self._continue_button.lift()
 
     def _inventory_page(self):
         """Restructures the text window according to the inventory of the player character."""
@@ -348,7 +507,7 @@ class UI:
 
         # Bring up Inventory UI
         self._inv_listbox.lift()
-        self._inv_desc_label.lift()
+        self._lower_desc_label.lift()
         self._use_item_button.place(relx=0.4, rely=0.25, anchor="center")
         self._discard_item_button.place(relx=0.6, rely=0.25, anchor="center")
 
@@ -372,7 +531,7 @@ class UI:
         # Initialize variable for item and insert its description into the label
         item_list = self._game_logic.inv_retrieval()
         item = item_list[sel[0]]
-        self._inv_desc_label.config(text=item.description)
+        self._lower_desc_label.config(text=item.description)
 
     def _use_item(self):
         """Processes the apply_effect if the selected item is a consumable and then updates the displayed inventory
@@ -420,7 +579,7 @@ class UI:
 
         # Bring up stats UI
         self._stats_label.lift()
-        self._stats_label.configure(text=self._game_logic.stat_retrieval())
+        self._stats_label.configure(text=self._game_logic.player_display())
         self._save_file_button.place(relx=0.4, rely=0.25, anchor="center")
         self._load_file_button.place(relx=0.6, rely=0.25, anchor="center")
 
@@ -460,6 +619,18 @@ class UI:
         """Restores all the control panel buttons from the UI."""
         for button in (self._stats_button, self._inventory_button, self._inspect_button):
             button.config(state='normal')
+
+    def _disable_control_panel(self):
+        """Restores all the control panel buttons from the UI."""
+        for button in (self._stats_button, self._inventory_button, self._inspect_button):
+            button.config(state='disabled')
+
+    def _remove_battle_buttons(self):
+        """Remove the attack and flee buttons from the UI."""
+        if self._attack_button.winfo_ismapped:
+            self._attack_button.place_forget()
+        if self._flee_button.winfo_ismapped:
+            self._flee_button.place_forget()
 
     def _remove_item_buttons(self):
         """Removes the use item and discard buttons from the UI."""

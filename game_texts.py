@@ -29,3 +29,9 @@ LOAD_WARNING_TEXT = textwrap.dedent("""
         Warning! You will lose any progress that you have made since you last saved!\n
         Are you sure that you want to continue loading your previous save?
         """)
+
+GAME_OVER = textwrap.dedent("""
+        What a pity... it would seem misfortune has befallen you.\n\n
+        Would you like to turn back the clock?\n\n
+        Or perhaps begin anew...
+        """)
