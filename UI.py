@@ -4,13 +4,11 @@ import json
 from game_texts import INTRO_TEXT, LOAD_TEXT, HELP_TEXT, LOAD_WARNING_TEXT
 from items import *
 import zmq
-import time
+
 
 ###############
 # Game Logic
 ###############
-
-
 class Player:
     """A class that represents the player character information"""
 
@@ -43,7 +41,7 @@ class Item:
 class GameLogic:
     """A class that holds the logic for running an instance of the game and communicating with microservices."""
 
-    def __init__(self, map_addr="tcp://localhost:55555"):
+    def __init__(self):
         """Initialize the game instance, defined by player character save data and other factors."""
         self._player = Player({
             "name": "Hero",
@@ -55,15 +53,31 @@ class GameLogic:
             },
             "inventory": [health_potion, old_broadsword],
             "position": ["test_map", [0, 0]]})
+        self._tile_info = {
+            'narration': 'Map name does not match save file or map service is down',
+            'inspection': 'Map name does not match save file or map service is down'}
 
-        # Initialize context and timer for zmq, establish map socket
+        # Establish microservice communication routes
+        services = {
+            "random": "tcp://localhost:5555",
+            "battle": "tcp://localhost:5556",
+            "map": "tcp://localhost:5557",
+        }
+
+        # Initialize context and socks obj
         self._ctx = zmq.Context.instance()
-        self._req_timeout_ms = 2000
-        self._map_sock = self._ctx.socket(zmq.REQ)
-        self._map_sock.connect(map_addr)
+        self._socks = {}
+
+        # Establish socket connection for each service
+        for name, addr in services.items():
+            sock = self._ctx.socket(zmq.REQ)
+            sock.connect(addr)
+            sock.setsockopt(zmq.RCVTIMEO, 1000)
+            sock.setsockopt(zmq.SNDTIMEO, 1000)
+            self._socks[name] = sock
 
     def _send_map_request(self, destination):
-        """Send a request to the map for updated information regarding the player's new position"""
+        """Send a request to the map service for updated information regarding the player's new position"""
         # establish a JSON file to send
         msg = {
             "map": self._player.position[0],
@@ -72,18 +86,30 @@ class GameLogic:
         print(msg)
         # Send message to map program
         try:
-            self._map_sock.send_json(msg)
-            time.sleep(0.1)
-            reply = self._map_sock.recv_json()
+            self._socks['map'].send_json(msg)
+            reply = self._socks['map'].recv_json()
             if reply["status"] == "success":
                 self._player.position[1] = destination
-                return reply['data']
+                self._tile_info = reply['data']
             elif reply["status"] == "error" or reply["status"] == "out_of_bounds":
-                return reply['data']
+                self._tile_info = reply['data']
         except zmq.Again:
-            return {"status": "error", "message": "Map service timeout"}
+            self._tile_info['narration'] = "Map name does not match save file or map service is down"
+            self._tile_info['inspection'] = "Map name does not match save file or map service is down"
+
         except zmq.ZMQError as e:
             return {"status": "error", "message": f"ZMQ failure: {e}"}
+
+    def _send_value_request(self):
+        """ Send a request to the random value generator for a random number in range 1 to 100. If a failure occurs,
+        simply return a default value of 50"""
+        msg = [1]
+        try:
+            self._socks['random'].send_json(msg)
+            reply = self._socks['random'].recv_json()
+            return reply
+        except (zmq.Again, zmq.ZMQError) as e:
+            return 50
 
     def move_player(self, direction):
         """Calculates the new position of the player based on the input from the UI, calls the map request method and
@@ -93,8 +119,15 @@ class GameLogic:
         elif direction == "east": x += 1
         elif direction == "south": y -= 1
         elif direction == "west": x -= 1
-        resp = self._send_map_request([x, y])
-        return resp
+        self._send_map_request([x, y])
+
+    def get_narration(self):
+        """Returns the narration of the current tile information"""
+        return self._tile_info["narration"]
+
+    def get_inspection(self):
+        """Returns the inspection of the current tile information"""
+        return self._tile_info["inspection"]
 
     def load_player(self):
         """Access the save_file.json file get information to create a previously saved player object."""
@@ -280,10 +313,9 @@ class UI:
         self._return_button.place(relx=1, rely=1, anchor='se')
 
         # Load the current tile narration
-        tile = self._game_logic.move_player(None)
-        narration = tile['narration']
+        self._game_logic.move_player(None)
+        narration = self._game_logic.get_narration()
         self._text_label.config(text=narration)
-
 
     def _return(self):
         """Places the text window that holds narration at the front of the screen."""
@@ -292,26 +324,27 @@ class UI:
         self._remove_save_buttons()
 
         # Enable any disabled controls and lift the text window
-        self._inventory_button.config(state='normal')
-        self._inspect_button.config(state='normal')
-        self._stats_button.config(state='normal')
+        self._enable_control_panel()
         self._enable_movement()
         self._text_label.lift()
 
-    def _move(self, direction):
-        """Calls to the game_logic to move the player through the map"""
-        new_tile = self._game_logic.move_player(direction)
-        narration = new_tile['narration']
+        # Return on screen text to tile narrative
+        narration = self._game_logic.get_narration()
         self._text_label.config(text=narration)
 
+    def _move(self, direction):
+        """Calls to the game_logic to move the player through the map"""
+        self._game_logic.move_player(direction)
+        narration = self._game_logic.get_narration()
+        self._text_label.config(text=narration)
 
     def _inventory_page(self):
         """Restructures the text window according to the inventory of the player character."""
         # Remove or disable unneeded widgets
         self._disable_movement()
+        self._enable_control_panel()
         self._remove_save_buttons()
         self._inventory_button.config(state='disabled')
-        self._stats_button.config(state='normal')
 
         # Bring up Inventory UI
         self._inv_listbox.lift()
@@ -322,7 +355,8 @@ class UI:
         # UI logic
         self._inv_listbox.bind("<<ListboxSelect>>", self._on_inv_select)
 
-        # Populate item list
+        # Clear and then Populate item list
+        self._inv_listbox.delete(0, END)
         item_list = self._game_logic.inv_retrieval()
         for item in item_list:
             self._inv_listbox.insert('end', item.name)
@@ -370,20 +404,19 @@ class UI:
 
     def _inspect_page(self):
         """Inspects the environment, fetching additional text information for the user to read."""
-        self._disable_movement()
+        self._return()
         self._inspect_button.config(state='disabled')
 
-        tile = self._game_logic.move_player(None)
-        narration = tile['inspection']
+        narration = self._game_logic.get_inspection()
         self._text_label.config(text=narration)
 
     def _stats_page(self):
         """Restructures the text window according to the stats of the player character."""
         # Remove or disable unneeded widgets
         self._disable_movement()
+        self._enable_control_panel()
         self._remove_item_buttons()
         self._stats_button.config(state='disabled')
-        self._inventory_button.config(state='normal')
 
         # Bring up stats UI
         self._stats_label.lift()
@@ -421,6 +454,11 @@ class UI:
     def _enable_movement(self):
         """Enables the movement buttons while on the non-exploration screens"""
         for button in (self._north_button, self._east_button, self._south_button, self._west_button):
+            button.config(state='normal')
+
+    def _enable_control_panel(self):
+        """Restores all the control panel buttons from the UI."""
+        for button in (self._stats_button, self._inventory_button, self._inspect_button):
             button.config(state='normal')
 
     def _remove_item_buttons(self):
