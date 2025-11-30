@@ -1,4 +1,3 @@
-import textwrap
 from tkinter import *
 import json
 from game_texts import *
@@ -33,9 +32,6 @@ class Item:
         self.equip_effect = equip_effect
         self.apply_effect = apply_effect
         self.remove_effect = remove_effect
-
-    def to_dict(self):
-        """Return a dictionary of the item attributes"""
 
 
 class GameLogic:
@@ -179,7 +175,7 @@ class GameLogic:
         self._player = Player({
             "name": "Hero",
             "stats": {
-                "health": 1,
+                "health": 25,
                 "mana": 0,
                 "attack": 6,
                 "defense": 3

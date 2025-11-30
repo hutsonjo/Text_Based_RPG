@@ -31,7 +31,7 @@ LOAD_WARNING_TEXT = textwrap.dedent("""
         """)
 
 GAME_OVER = textwrap.dedent("""
-        What a pity... it would seem misfortune has befallen you.\n\n
+        What a pity... It would seem misfortune has befallen you.\n\n
         Would you like to turn back the clock?\n\n
         Or perhaps begin anew...
         """)
