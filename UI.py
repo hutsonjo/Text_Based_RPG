@@ -65,8 +65,11 @@ class GameLogic:
         """Send a request to the map service for updated information regarding the player's new position"""
         # establish a JSON file to send
         msg = {
-            "map": self._player.position[0],
-            "coords": destination
+            "service_key": "rpg",
+            "data": {
+                "map": self._player.position[0],
+                "coords": destination
+            }
         }
         print(msg)
         # Send message to map program
@@ -100,9 +103,12 @@ class GameLogic:
 
     def _send_enemy_request(self):
         """Send a request to the enemy service for an enemy from the current biome"""
-        msg = self._tile_info['biome']
+        msg = {
+            "service_key": "rpg",
+            "data": {"biome": self._tile_info['biome']}
+        }
         try:
-            self._socks['enemy'].send_string(msg)
+            self._socks['enemy'].send_json(msg)
             reply = self._socks['enemy'].recv_json()
             return reply
         except (zmq.Again, zmq.ZMQError) as e:
