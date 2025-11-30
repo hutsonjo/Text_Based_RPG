@@ -1,1 +1,1 @@
-{"name": "Hero", "stats": {"health": 100, "mana": 0, "attack": 10, "defense": 10}, "inventory": ["Health Potion", "Old Broadsword"], "position": ["test_map", [2, 2]]}
+{"name": "Hero", "stats": {"health": 25, "mana": 0, "attack": 6, "defense": 3}, "inventory": ["Health Potion", "Old Broadsword"], "position": ["test_map", [7, 5]]}

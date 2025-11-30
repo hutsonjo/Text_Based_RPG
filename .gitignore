@@ -10,3 +10,6 @@ env/
 
 # IDEs
 .idea/
+
+# Save Data
+save_file.json

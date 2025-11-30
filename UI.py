@@ -74,9 +74,11 @@ class GameLogic:
         }
 
         # Send message to map program
+        print(f"Sending map request: {msg}")
         try:
             self._socks['map'].send_json(msg)
             reply = self._socks['map'].recv_json()
+            print(f"Received map response: {reply}")
             if reply["status"] == "success":
                 self._player.position[1] = destination
                 for key in reply['data'].keys():
@@ -95,9 +97,11 @@ class GameLogic:
         """ Send a request to the random value generator for a random number in range 1 to 100. If a failure occurs,
         simply return a default value of 50"""
         msg = [1]
+        print(f"Sending random value request: {msg}")
         try:
             self._socks['random'].send_json(msg)
             reply = self._socks['random'].recv_json()
+            print(f"Received random value response: {reply}")
             return reply
         except (zmq.Again, zmq.ZMQError) as e:
             return 50
@@ -108,9 +112,11 @@ class GameLogic:
             "service_key": "rpg",
             "data": {"biome": self._tile_info['biome']}
         }
+        print(f"Sending enemy request: {msg}")
         try:
             self._socks['enemy'].send_json(msg)
             reply = self._socks['enemy'].recv_json()
+            print(f"Received enemy response: {reply}")
             return reply
         except (zmq.Again, zmq.ZMQError) as e:
             return self._current_enemy
@@ -125,11 +131,12 @@ class GameLogic:
                 self._current_enemy
             ]
         }
-        print(msg)
+        print(f"Sending battle request: {msg}")
         # Send message and retrieve results
         try:
             self._socks['battle'].send_json(msg)
             reply = self._socks['battle'].recv_json()
+            print(f"Received battle response: {reply}")
             return reply
         except (zmq.Again, zmq.ZMQError) as e:
             return msg['data']
@@ -137,9 +144,11 @@ class GameLogic:
     def _send_weather_request(self):
         """Send a request to the weather microservice to change the current weather value."""
         msg = {"service_key": "weather_state"}
+        print(f"Sending weather request: {msg}")
         try:
             self._socks['weather'].send_json(msg)
             reply = self._socks['weather'].recv_json()
+            print(f"Received weather response: {reply}")
             self._weather = reply['weather_state']
         except (zmq.Again, zmq.ZMQError) as e:
             return
@@ -620,11 +629,16 @@ class UI:
         self._load_warning_label = Label(self._load_warning_popup, text=LOAD_WARNING_TEXT, wraplength=400)
         self._load_warning_label.pack()
         self._yes_load_button = Button(self._load_warning_popup, text='YES',
-                                       command=lambda: (self._game_logic.load_player(),
+                                       command=lambda: (self._reload(),
                                                         self._load_warning_popup.destroy()))
         self._yes_load_button.place(relx=0.4, rely=0.8, anchor='center')
         self._no_load_button = Button(self._load_warning_popup, text='NO', command=self._load_warning_popup.destroy)
         self._no_load_button.place(relx=0.6, rely=0.8, anchor='center')
+
+    def _reload(self):
+        """Helper function that ensures a refresh of the stats page when reloading previous save"""
+        self._game_logic.load_player()
+        self._stats_page()
 
     def _help_page(self):
         """Deploys a pop-up window to remind the player of the control scheme."""
