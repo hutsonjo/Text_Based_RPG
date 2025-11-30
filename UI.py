@@ -46,7 +46,8 @@ class GameLogic:
             "random": "tcp://localhost:5555",
             "battle": "tcp://localhost:5556",
             "map": "tcp://localhost:5557",
-            "enemy": "tcp://localhost:5558"
+            "enemy": "tcp://localhost:5558",
+            "weather": "tcp://localhost:5559"
         }
 
         # Initialize context and socks obj
@@ -71,7 +72,7 @@ class GameLogic:
                 "coords": destination
             }
         }
-        print(msg)
+
         # Send message to map program
         try:
             self._socks['map'].send_json(msg)
@@ -129,10 +130,19 @@ class GameLogic:
         try:
             self._socks['battle'].send_json(msg)
             reply = self._socks['battle'].recv_json()
-            print(reply)
             return reply
         except (zmq.Again, zmq.ZMQError) as e:
             return msg['data']
+
+    def _send_weather_request(self):
+        """Send a request to the weather microservice to change the current weather value."""
+        msg = {"service_key": "weather_state"}
+        try:
+            self._socks['weather'].send_json(msg)
+            reply = self._socks['weather'].recv_json()
+            self._weather = reply['weather_state']
+        except (zmq.Again, zmq.ZMQError) as e:
+            return
 
     def move_player(self, direction):
         """Calculates the new position of the player based on the input from the UI, calls the map request method and
@@ -144,9 +154,17 @@ class GameLogic:
         elif direction == "west": x -= 1
         self._send_map_request([x, y])
 
+        self._weather_count -= 1
+        if self._weather_count == 0:
+            self._weather_count += 5
+            self._send_weather_request()
+
     def get_narration(self):
         """Returns the narration of the current tile information"""
-        return self._tile_info["narration"]
+        narration = self._tile_info["narration"]
+        weather = WEATHER[self._weather]
+        result = narration + weather
+        return result
 
     def get_inspection(self):
         """Returns the inspection of the current tile information"""
@@ -200,6 +218,8 @@ class GameLogic:
             'defense': 0,
             'biome': 'none'
         }
+        self._weather = 'Sunny'
+        self._weather_count = 5
 
     def get_enemy_health(self):
         """Returns the current enemy's health"""

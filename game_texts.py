@@ -35,3 +35,13 @@ GAME_OVER = textwrap.dedent("""
         Would you like to turn back the clock?\n\n
         Or perhaps begin anew...
         """)
+
+WEATHER = {
+    "Clear": "\n\n You look out at the horizon and see clear skies ahead.",
+    "Foggy": "\n\n Fog surrounds you, it is difficult to make out much else.",
+    "Rainy": "\n\n Rain covers you, the water makes your gear feel heavy.",
+    "Stormy": "\n\n A storm has formed overhead, the clapping thunder is deafening.",
+    "Snowy": "\n\n Snow is crunches beneath your feet, the reflection of the horizon is blinding.",
+    "Cloudy": "\n\n The sky is covered in a thick blanket of clouds. No light graces you.",
+    "Sunny": "\n\n The sun hangs high in a bright blue sky. You can see far and wide."
+}
