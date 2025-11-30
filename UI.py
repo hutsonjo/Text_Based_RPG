@@ -82,11 +82,12 @@ class GameLogic:
                 for key in reply['data'].keys():
                     self._tile_info[key] = reply['data'][key]
             elif reply["status"] == "error" or reply["status"] == "out_of_bounds":
-                self._tile_info = reply['data']
+                self._tile_info['narration'] = reply['data']['narration']
+                self._tile_info['inspection'] = reply['data']['inspection']
+                self._tile_info['encounter'] = 0
         except zmq.Again:
             self._tile_info['narration'] = "Map name does not match save file or map service is down"
             self._tile_info['inspection'] = "Map name does not match save file or map service is down"
-
         except zmq.ZMQError as e:
             return {"status": "error", "message": f"ZMQ failure: {e}"}
 
@@ -102,9 +103,8 @@ class GameLogic:
             return 50
 
     def _send_enemy_request(self):
-        """Send a request to the random value generator for a random number in range 1 to 100. If a failure occurs,
-        simply return a default value of 50"""
-        msg = [self._tile_info['biome']]
+        """Send a request to the enemy service for an enemy from the current biome"""
+        msg = self._tile_info['biome']
         try:
             self._socks['enemy'].send_string(msg)
             reply = self._socks['enemy'].recv_json()
@@ -122,11 +122,12 @@ class GameLogic:
                 self._current_enemy
             ]
         }
-
+        print(msg)
         # Send message and retrieve results
         try:
             self._socks['battle'].send_json(msg)
             reply = self._socks['battle'].recv_json()
+            print(reply)
             return reply
         except (zmq.Again, zmq.ZMQError) as e:
             return msg['data']
@@ -170,6 +171,7 @@ class GameLogic:
         if chance < 50:
             return False
         else:
+            self._current_enemy['health'] = 0
             return True
 
     def reset(self):
@@ -177,13 +179,13 @@ class GameLogic:
         self._player = Player({
             "name": "Hero",
             "stats": {
-                "health": 100,
+                "health": 1,
                 "mana": 0,
-                "attack": 10,
-                "defense": 10
+                "attack": 6,
+                "defense": 3
             },
             "inventory": [health_potion, old_broadsword],
-            "position": ["test_map", [0, 0]]})
+            "position": ["test_map", [5, 5]]})
         self._tile_info = {
             'narration': 'Map name does not match save file or map service is down',
             'inspection': 'Map name does not match save file or map service is down',
@@ -271,9 +273,9 @@ class GameLogic:
         """Returns a string of the current enemy's stats to be displayed in a label."""
         return textwrap.dedent(f"""
             Enemy: {self._current_enemy['name']}
-            Health: {self._player.stats['health']}
-            Attack: {self._player.stats['attack']}
-            Defense: {self._player.stats['defense']}
+            Health: {self._current_enemy['health']}
+            Attack: {self._current_enemy['attack']}
+            Defense: {self._current_enemy['defense']}
             """)
 
 
@@ -411,6 +413,11 @@ class UI:
         self._help_button.place(relx=0, rely=1, anchor='sw')
         self._return_button.place(relx=1, rely=1, anchor='se')
 
+        # Restore control panel and return in case this is a reload
+        self._enable_movement()
+        self._enable_control_panel()
+        self._return_button.config(state='normal')
+
         # Load the current tile narration
         self._game_logic.move_player(None)
         narration = self._game_logic.get_narration()
@@ -447,7 +454,7 @@ class UI:
             self._disable_movement()
             self._disable_control_panel()
             self._remove_save_buttons()
-            self._return_button.config(state=DISABLED)
+            self._return_button.config(state='disabled')
 
             # Bring up Battle UI
             self._attack_button.place(relx=0.4, rely=0.25, anchor="center")
@@ -467,7 +474,7 @@ class UI:
         self._game_logic.battle_turn()
         if self._game_logic.get_enemy_health() <= 0:
             self._victory_and_flee_page()
-        elif self._game_logic.get_enemy_health() <= 0:
+        elif self._game_logic.get_player_health() <= 0:
             self._game_over_page()
         else:
             self._battle_page(True)
@@ -477,7 +484,7 @@ class UI:
         if self._game_logic.flee():
             self._victory_and_flee_page(False)
         else:
-            self._flee_button.config(state=DISABLED, text='Failure!')
+            self._flee_button.config(state='disabled', text='Failure!')
 
     def _victory_and_flee_page(self, victory=True):
         """Displays that the player is victorious and sets up return to exploration."""
@@ -494,8 +501,8 @@ class UI:
         self._remove_battle_buttons()
         self._text_label.lift()
         self._text_label.config(text=GAME_OVER)
-        self._new_file_button.lift()
-        self._continue_button.lift()
+        self._new_file_button.place(relx=0.4, rely=0.25, anchor="center")
+        self._continue_button.place(relx=0.6, rely=0.25, anchor="center")
 
     def _inventory_page(self):
         """Restructures the text window according to the inventory of the player character."""
@@ -579,7 +586,7 @@ class UI:
 
         # Bring up stats UI
         self._stats_label.lift()
-        self._stats_label.configure(text=self._game_logic.player_display())
+        self._stats_label.config(text=self._game_logic.player_display())
         self._save_file_button.place(relx=0.4, rely=0.25, anchor="center")
         self._load_file_button.place(relx=0.6, rely=0.25, anchor="center")
 

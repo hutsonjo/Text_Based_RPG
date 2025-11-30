@@ -5,7 +5,7 @@ context = zmq.Context()
 socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5558")
 
-enemies = {
+enemies = [
         {
             'name': 'Goblin',
             'health': 10,
@@ -62,7 +62,7 @@ enemies = {
             'attack': 10,
             'defense': 7,
             'biome': 'scorched'
-        }}
+        }]
 
 
 while True:

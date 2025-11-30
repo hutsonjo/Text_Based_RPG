@@ -5,7 +5,9 @@ socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5557")
 
 ERROR = {'narration': 'Map name does not match save file',
-         'inspection': 'Map name does not match save file'}
+         'inspection': 'Map name does not match save file',
+         'biome': '',
+         'encounter': 0}
 
 OUTOFBOUNDS = {'narration': 'You only see vast sea where you are trying to go.',
                'inspection': 'You smell salt.'}
